@@ -15,15 +15,16 @@ app.get("/books", (req, res) => {
   res.json({ message: "this is the books endpoint" });
 });
 
-//Fixed frontend path
-const clientDistPath = path.resolve("frontend", "dist");
+// SERVE FRONTEND (CORRECT FOR MONOREPO)
+const clientDistPath = path.resolve("..", "frontend", "dist");
 
 app.use(express.static(clientDistPath));
 
-app.get("*", (req, res) => {
+app.get("/*", (req, res) => {
   res.sendFile(path.resolve(clientDistPath, "index.html"));
 });
 
+
 app.listen(process.env.PORT || 8080, () => {
-  console.log("Server is running on port:", process.env.PORT);
+  console.log("Server is running on port:", process.env.PORT || 8080);
 });
