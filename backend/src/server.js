@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
+import { connectDB } from "./lib/db.js";
 
 dotenv.config();
 
@@ -17,14 +18,27 @@ app.get("/books", (req, res) => {
 
 // SERVE FRONTEND (CORRECT FOR MONOREPO)
 const clientDistPath = path.resolve("..", "frontend", "dist");
-
 app.use(express.static(clientDistPath));
 
-app.get("/*", (req, res) => {
+
+//SPA fallback route to serve index.html for any unmatched routes (for client-side routing)
+app.use((req, res) => {
   res.sendFile(path.resolve(clientDistPath, "index.html"));
 });
 
 
-app.listen(process.env.PORT || 8080, () => {
-  console.log("Server is running on port:", process.env.PORT || 8080);
+
+// Start the server after connecting to the database
+const startServer = async () => {
+  try {
+    await connectDB();
+    app.listen(process.env.PORT || 8080, () => {
+      console.log("Server is running on port:", process.env.PORT || 8080); 
 });
+  } catch (error) {
+    console.error("💥 Failed to start server:", error)
+  }
+};
+
+
+startServer();
