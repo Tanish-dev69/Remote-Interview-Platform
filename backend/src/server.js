@@ -23,10 +23,10 @@ app.get("/books", (req, res) => {
 
 //make our app ready for deployment
 if (ENV.NODE_ENV === "production") {
-  const clientDistPath = path.join(__dirname, "..", "..", "frontend", "dist");
+  const clientDistPath = path.join(process.cwd(), "frontend", "dist");
   app.use(express.static(clientDistPath));
 
-  app.get(/.*/, (req, res) => {
+  app.get("*", (req, res) => {
     res.sendFile(path.join(clientDistPath, "index.html"));
   });
 }
