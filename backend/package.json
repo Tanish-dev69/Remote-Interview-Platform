@@ -12,8 +12,10 @@
   "type": "module",
   "description": "",
   "dependencies": {
+    "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^4.19.2",
+    "inngest": "^3.44.3",
     "mongodb": "^4.17.2",
     "mongoose": "^8.19.1"
   },
