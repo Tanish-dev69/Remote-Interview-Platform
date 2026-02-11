@@ -17,7 +17,7 @@ app.use(express.json());
 // credentials: true allows cookies to be sent in cross-origin requests, which is necessary for authentication and session management when the frontend and backend are on different domains or ports.
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 
-app.use("/api/inngest", serve({client:inngest, functions}));
+app.use("/api/inngest", serve({client: inngest, functions}));
 
 
 // API routes
