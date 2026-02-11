@@ -21,6 +21,23 @@ app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 app.use("/api/inngest", serve({client: inngest, functions}));
 app.use("/api/webhooks", clerkWebhook);
 
+app.post("/api/webhooks/clerk", async (req, res) => {
+  try {
+    const evt = req.body;
+
+    await inngest.send({
+      name: evt.type,
+      data: evt.data,
+    });
+
+    res.status(200).send("ok");
+  } catch (e) {
+    console.error(e);
+    res.status(500).send("error");
+  }
+});
+
+
 // API routes
 app.get("/health", (req, res) => {
   res.json({ message: "api is up and running" });
