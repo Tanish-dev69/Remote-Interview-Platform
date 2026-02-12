@@ -3,11 +3,12 @@ import path from "path";
 import cors from "cors";
 import { serve } from "inngest/express";
 import clerkWebhook from "./routes/clerkWebhook.js";
+import { clerkMiddleware } from '@clerk/express';
 
 import dotenv from "dotenv";
 import { connectDB } from "./lib/db.js";
-
 import { inngest, functions } from "./lib/inngest.js";
+import chatRoutes from "./routes/chatRoutes.js";
 
 dotenv.config();
 
@@ -18,8 +19,11 @@ app.use(express.json());
 // credentials: true allows cookies to be sent in cross-origin requests, which is necessary for authentication and session management when the frontend and backend are on different domains or ports.
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
 
+app.use(clerkMiddleware()); // this adds auth failed to req object: req.auth();
+
 app.use("/api/inngest", serve({client: inngest, functions}));
 app.use("/api/webhooks", clerkWebhook);
+app.use("/api/chat", chatRoutes);
 
 app.post("/api/webhooks/clerk", async (req, res) => {
   try {
@@ -43,9 +47,6 @@ app.get("/health", (req, res) => {
   res.json({ message: "api is up and running" });
 });
 
-app.get("/books", (req, res) => {
-  res.json({ message: "this is the books endpoint" });
-});
 
 // SERVE FRONTEND (CORRECT FOR MONOREPO)
 const clientDistPath = path.resolve("..", "frontend", "dist");
