@@ -1,4 +1,5 @@
 import { StreamChat } from "stream-chat";
+import { StreamClient } from "@stream-io/node-sdk";
 import { ENV } from "./env.js";
 
 const apiKey = ENV.STREAM_API_KEY;
@@ -8,7 +9,10 @@ if(!apiKey || !apiSecret) {
     throw new Error("STREAM_API_KEY and STREAM_API_SECRET is MISSING");
 }
 
-export const chatClient = StreamChat.getInstance(apiKey, apiSecret);
+export const chatClient = StreamChat.getInstance(apiKey, apiSecret); // this is for chat features
+export const streamClient = new StreamClient(apiKey, apiSecret); // this is for video calls
+
+
 
 export const upsertStreamUser = async(userData) => {
     try {
@@ -29,4 +33,3 @@ export const deleteStreamUser = async (userData) => {
     }
 };
 
-//todo:add another method to generate token for a user, which can be used in frontend to connect to stream client. This method will be called in auth controller after user is created or logged in.
