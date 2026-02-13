@@ -9,6 +9,7 @@ import dotenv from "dotenv";
 import { connectDB } from "./lib/db.js";
 import { inngest, functions } from "./lib/inngest.js";
 import chatRoutes from "./routes/chatRoutes.js";
+import sessionRoutes from "./routes/sessionRoutes.js";
 
 dotenv.config();
 
@@ -24,6 +25,8 @@ app.use(clerkMiddleware()); // this adds auth failed to req object: req.auth();
 app.use("/api/inngest", serve({client: inngest, functions}));
 app.use("/api/webhooks", clerkWebhook);
 app.use("/api/chat", chatRoutes);
+app.use("/api/sessions", sessionRoutes);
+
 
 app.post("/api/webhooks/clerk", async (req, res) => {
   try {
