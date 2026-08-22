@@ -1,8 +1,9 @@
 import { useUser } from "@clerk/clerk-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import axios from "axios"; // Added axios for the problem fetch
 import { useEndSession, useJoinSession, useSessionById } from "../hooks/useSessions";
-import { PROBLEMS } from "../data/problems";
+// import { PROBLEMS } from "../data/problems"; // ❌ REMOVED
 import { executeCode } from "../lib/piston";
 import Navbar from "../components/Navbar";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -21,6 +22,11 @@ function SessionPage() {
   const { user } = useUser();
   const [output, setOutput] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState("javascript");
+  const [code, setCode] = useState("");
+  
+  // New State for fetching problem data dynamically
+  const [problemData, setProblemData] = useState(null);
 
   const { data: sessionData, isLoading: loadingSession, refetch } = useSessionById(id);
 
@@ -38,32 +44,38 @@ function SessionPage() {
     isParticipant
   );
 
-  // find the problem data based on session problem title
-  const problemData = session?.problem
-    ? Object.values(PROBLEMS).find((p) => p.title === session.problem)
-    : null;
+  // --- NEW: Fetch Problem Data from Backend ---
+  useEffect(() => {
+    const fetchProblem = async () => {
+      // We look up the problem based on the ID stored in the session
+      if (session?.problemId) {
+        try {
+          const res = await axios.get(`http://localhost:8080/api/problems/${session.problemId}`);
+          if (res.data.success) {
+            setProblemData(res.data.data);
+          }
+        } catch (error) {
+          console.error("Failed to fetch session problem details:", error);
+        }
+      }
+    };
+    fetchProblem();
+  }, [session?.problemId]);
 
-  const [selectedLanguage, setSelectedLanguage] = useState("javascript");
-  const [code, setCode] = useState(problemData?.starterCode?.[selectedLanguage] || "");
-
-  // auto-join session if user is not already a participant and not the host
+  // Auto-join session logic (Preserved)
   useEffect(() => {
     if (!session || !user || loadingSession) return;
     if (isHost || isParticipant) return;
-
     joinSessionMutation.mutate(id, { onSuccess: refetch });
-
-    // remove the joinSessionMutation, refetch from dependencies to avoid infinite loop
   }, [session, user, loadingSession, isHost, isParticipant, id]);
 
-  // redirect the "participant" when session ends
+  // Redirect when session ends (Preserved)
   useEffect(() => {
     if (!session || loadingSession) return;
-
     if (session.status === "completed") navigate("/dashboard");
   }, [session, loadingSession, navigate]);
 
-  // update code when problem loads or changes
+  // Update code when problem loads or language changes
   useEffect(() => {
     if (problemData?.starterCode?.[selectedLanguage]) {
       setCode(problemData.starterCode[selectedLanguage]);
@@ -73,7 +85,6 @@ function SessionPage() {
   const handleLanguageChange = (e) => {
     const newLang = e.target.value;
     setSelectedLanguage(newLang);
-    // use problem-specific starter code
     const starterCode = problemData?.starterCode?.[newLang] || "";
     setCode(starterCode);
     setOutput(null);
@@ -83,14 +94,14 @@ function SessionPage() {
     setIsRunning(true);
     setOutput(null);
 
-    const result = await executeCode(selectedLanguage, code);
+    // Passed problemId to executeCode to trigger the backend judge runner
+    const result = await executeCode(selectedLanguage, code, session?.problemId);
     setOutput(result);
     setIsRunning(false);
   };
 
   const handleEndSession = () => {
     if (confirm("Are you sure you want to end this session? All participants will be notified.")) {
-      // this will navigate the HOST to dashboard
       endSessionMutation.mutate(id, { onSuccess: () => navigate("/dashboard") });
     }
   };
@@ -101,13 +112,10 @@ function SessionPage() {
 
       <div className="flex-1">
         <PanelGroup direction="horizontal">
-          {/* LEFT PANEL - CODE EDITOR & PROBLEM DETAILS */}
           <Panel defaultSize={50} minSize={30}>
             <PanelGroup direction="vertical">
-              {/* PROBLEM DSC PANEL */}
               <Panel defaultSize={50} minSize={20}>
                 <div className="h-full overflow-y-auto bg-base-200">
-                  {/* HEADER SECTION */}
                   <div className="p-6 bg-base-100 border-b border-base-300">
                     <div className="flex items-start justify-between mb-3">
                       <div>
@@ -129,8 +137,9 @@ function SessionPage() {
                             session?.difficulty
                           )}`}
                         >
-                          {session?.difficulty.slice(0, 1).toUpperCase() +
-                            session?.difficulty.slice(1) || "Easy"}
+                          {session?.difficulty 
+                            ? session.difficulty.charAt(0).toUpperCase() + session.difficulty.slice(1) 
+                            : "Easy"}
                         </span>
                         {isHost && session?.status === "active" && (
                           <button
@@ -154,26 +163,23 @@ function SessionPage() {
                   </div>
 
                   <div className="p-6 space-y-6">
-                    {/* problem desc */}
+                    {/* Problem Description (Updated to use dynamic state) */}
                     {problemData?.description && (
                       <div className="bg-base-100 rounded-xl shadow-sm p-5 border border-base-300">
                         <h2 className="text-xl font-bold mb-4 text-base-content">Description</h2>
                         <div className="space-y-3 text-base leading-relaxed">
                           <p className="text-base-content/90">{problemData.description.text}</p>
                           {problemData.description.notes?.map((note, idx) => (
-                            <p key={idx} className="text-base-content/90">
-                              {note}
-                            </p>
+                            <p key={idx} className="text-base-content/90">{note}</p>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {/* examples section */}
+                    {/* Examples Section */}
                     {problemData?.examples && problemData.examples.length > 0 && (
                       <div className="bg-base-100 rounded-xl shadow-sm p-5 border border-base-300">
                         <h2 className="text-xl font-bold mb-4 text-base-content">Examples</h2>
-
                         <div className="space-y-4">
                           {problemData.examples.map((example, idx) => (
                             <div key={idx}>
@@ -183,22 +189,17 @@ function SessionPage() {
                               </div>
                               <div className="bg-base-200 rounded-lg p-4 font-mono text-sm space-y-1.5">
                                 <div className="flex gap-2">
-                                  <span className="text-primary font-bold min-w-[70px]">
-                                    Input:
-                                  </span>
+                                  <span className="text-primary font-bold min-w-[70px]">Input:</span>
                                   <span>{example.input}</span>
                                 </div>
                                 <div className="flex gap-2">
-                                  <span className="text-secondary font-bold min-w-[70px]">
-                                    Output:
-                                  </span>
+                                  <span className="text-secondary font-bold min-w-[70px]">Output:</span>
                                   <span>{example.output}</span>
                                 </div>
                                 {example.explanation && (
                                   <div className="pt-2 border-t border-base-300 mt-2">
                                     <span className="text-base-content/60 font-sans text-xs">
-                                      <span className="font-semibold">Explanation:</span>{" "}
-                                      {example.explanation}
+                                      <span className="font-semibold">Explanation:</span> {example.explanation}
                                     </span>
                                   </div>
                                 )}
@@ -241,9 +242,7 @@ function SessionPage() {
                       onRunCode={handleRunCode}
                     />
                   </Panel>
-
                   <PanelResizeHandle className="h-2 bg-base-300 hover:bg-primary transition-colors cursor-row-resize" />
-
                   <Panel defaultSize={30} minSize={15}>
                     <OutputPanel output={output} />
                   </Panel>
@@ -254,7 +253,6 @@ function SessionPage() {
 
           <PanelResizeHandle className="w-2 bg-base-300 hover:bg-primary transition-colors cursor-col-resize" />
 
-          {/* RIGHT PANEL - VIDEO CALLS & CHAT */}
           <Panel defaultSize={50} minSize={30}>
             <div className="h-full bg-base-200 p-4 overflow-auto">
               {isInitializingCall ? (

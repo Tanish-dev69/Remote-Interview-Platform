@@ -11,6 +11,7 @@ import { inngest, functions } from "./lib/inngest.js";
 import chatRoutes from "./routes/chatRoutes.js";
 import sessionRoutes from "./routes/sessionRoutes.js";
 import clerkWebhook from "./routes/clerkWebhook.js";
+import { PROBLEMS } from "./data/problems.js";
 
 dotenv.config();
 
@@ -26,23 +27,39 @@ app.use(express.json());
 console.log("Current Token in memory:", process.env.GLOT_TOKEN);
 
 // 3. Hardened CORS Configuration
-app.use(
-  cors({
-    origin: ["https://remote-interview-platform-1-xh21.onrender.com", "http://localhost:5173"], 
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+const allowedOrigins = [
+  "http://localhost:5173", // Local development
+  "https://remote-interview-platform-1-xh21.onrender.com" // Production frontend
+];
 
-// --- NEW: Code Execution Route (Glot.io Bridge) ---
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return callback(new Error("CORS policy violation"), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true
+}));
+
+// --- UPDATED: Code Execution Route (The "Judge" Bridge) ---
 app.post("/api/execute", async (req, res) => {
-  const { language, code } = req.body;
-  const GLOT_TOKEN = process.env.VITE_GLOT_TOKEN; 
+  const { language, code, problemId } = req.body;
+  const GLOT_TOKEN = process.env.GLOT_TOKEN; 
 
-  if (!language || !code) {
-    return res.status(400).json({ success: false, error: "Language and code are required." });
+  if (!language || !code || !problemId) {
+    return res.status(400).json({ success: false, error: "Missing required fields." });
   }
+
+  const problem = PROBLEMS[problemId];
+  if (!problem) {
+    return res.status(404).json({ success: false, error: "Problem definition not found." });
+  }
+
+  // 1. Wrap user code with the hidden test runner
+  const finalCode = `${code}\n${problem.testRunner[language.toLowerCase()]}`;
 
   try {
     const response = await axios.post(
@@ -50,31 +67,46 @@ app.post("/api/execute", async (req, res) => {
       {
         files: [
           {
-            name: language.toLowerCase() === "java" ? "Main.java" : "main", 
-            content: code,
+            name: language.toLowerCase() === "java" ? "Main.java" : "main",
+            content: finalCode,
           },
         ],
       },
       {
         headers: {
-          Authorization: "Token " + process.env.GLOT_TOKEN,
+          Authorization: "Token " + GLOT_TOKEN,
           "Content-Type": "application/json",
         },
       }
     );
 
+    const stdout = response.data.stdout || "";
+    const stderr = response.data.stderr || response.data.error || "";
+
+    // 2. Parse results (e.g., CASE_0:PASS)
+    const testResults = stdout
+      .split("\n")
+      .filter((line) => line.startsWith("CASE_"))
+      .map((line) => {
+        const [id, status] = line.split(":");
+        return { id, passed: status === "PASS" };
+      });
+
     res.json({
-      success: response.data.stderr === "" && response.data.error === "",
-      output: response.data.stdout,
-      error: response.data.stderr || response.data.error,
+      success: stderr === "",
+      testResults, // Array of pass/fail
+      output: stdout,
+      error: stderr,
     });
   } catch (error) {
-    console.error("Glot execution error:", error.response?.data || error.message);
-    res.status(500).json({ 
-      success: false, 
-      error: error.response?.data?.message || "Internal server error during code execution." 
+    console.error("Judge execution error:", error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      error: "The code runner encountered an internal error.",
     });
   }
+  console.log("Creating session:", req.body);
+  res.status(201).json({ success: true, roomId: "some-unique-id" });
 });
 
 // 4. API Routes
@@ -83,7 +115,42 @@ app.use("/api/webhooks", clerkWebhook);
 app.use("/api/chat", chatRoutes);
 app.use("/api/sessions", sessionRoutes);
 
-// 5. Basic Health & Root Routes (The 80 lines you wanted back!)
+// Health check endpoint for uptime monitors / deployments
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    message: "Backend is healthy",
+    service: "remote-interview-platform",
+    timestamp: new Date().toISOString()
+  });
+});
+
+// --- GET All Problems (Optional but recommended for your Dashboard) ---
+app.get("/api/problems", (req, res) => {
+  const problemsList = Object.values(PROBLEMS).map(({ testRunner, starterCode, ...publicData }) => publicData);
+  res.json({ success: true, data: problemsList });
+});
+
+// --- GET Problem Details ---
+app.get("/api/problems/:id", (req, res) => {
+  const { id } = req.params;
+  const problem = PROBLEMS[id];
+
+  if (!problem) {
+    return res.status(404).json({ success: false, error: "Problem not found" });
+  }
+
+  // SECURITY: Extract only the data the user needs to see.
+  // We exclude 'testRunner' so users can't see the hidden test logic in the network tab.
+  const { testRunner, ...publicData } = problem;
+
+  res.json({
+    success: true,
+    data: publicData
+  });
+});
+
+// 5. Basic Health & Root Routes 
 app.get("/", (req, res) => {
   res.send(`
     <!DOCTYPE html>

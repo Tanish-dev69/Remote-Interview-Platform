@@ -46,10 +46,10 @@ export async function getActiveSessions(_, res) {
     try {
         const sessions = await Session.find({ status: "active" })
             .populate("host", "name profileImage email clerkId")
-            .sort({ createdAt: -1 })
-            .limit(20);
+            .sort({ createdAt: -1 });
 
-        res.status(200).json({ sessions });
+        // 💉 Wrap it in 'data' so the frontend sessionApi can read it
+        res.status(200).json({ success: true, data: sessions });
     } catch (error) {
         console.error("Error fetching active sessions:", error.message);
         res.status(500).json({ message: "Failed to fetch active sessions" });
@@ -68,7 +68,7 @@ export async function getMyRecentSessions(req, res) {
             .sort({ createdAt: -1 })
             .limit(20);
 
-        res.status(200).json({ sessions });
+        res.status(200).json({ success: true, data: sessions });
     } catch (error) {
         console.error("Error fetching recent sessions:", error.message);
         res.status(500).json({ message: "Failed to fetch recent sessions" });
